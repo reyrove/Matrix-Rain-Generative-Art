@@ -86,6 +86,7 @@
     .cover-sub { font-family: var(--serif); font-size: clamp(1.3rem, 1.9vw, 1.7rem); font-weight: 300; font-style: italic; line-height: 1.4; color: var(--text-dim); max-width: 500px; }
     .cover-desc { color: var(--text-dim); font-size: 13px; line-height: 1.8; max-width: 460px; }
     .cover-art { position: relative; aspect-ratio: 1; background: #000; border: 1px solid var(--line); overflow: hidden; max-width: 520px; margin-left: auto; width: 100%; }
+    
     .canvas-slot { position: absolute; inset: 0; overflow: hidden; }
     .canvas-slot canvas {
       display: block !important;
@@ -94,6 +95,7 @@
       width: 100% !important; height: 100% !important;
       max-width: 100% !important; max-height: 100% !important;
     }
+    
     .cover-foot { display: grid; grid-template-columns: repeat(3, 1fr); gap: 40px; padding-top: 32px; border-top: 1px solid var(--line); font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-faint); }
     .cover-foot .k { display: block; color: var(--gold-soft); margin-bottom: 8px; }
     .cover-foot .v { color: var(--text-dim); letter-spacing: 0.1em; line-height: 1.7; }
@@ -711,21 +713,6 @@
 <script>
 // ============================================================
 // MATRIX RAIN — GENERATIVE DIGITAL-RAIN COMPOSITIONS
-//
-// Same seed → many surfaces:
-//   • Cover, Plate, Frame — same seed
-//   • All 4 surfaces (Print, Scarf, Textile, Wall) — same seed
-//   • Archive — 8 unique seeds
-//
-// Rectangular surfaces tile the square composition to fill.
-//
-// Generative engine (preserved from source):
-//   • 100 × 100 tile grid
-//   • 6 stream styles (vertical, diagonal, wave, concentric,
-//     binary, particle)
-//   • 6 terminal palettes (green, blue, cyan, purple, red, gray)
-//   • Intensity 0.3–0.8
-//   • Optional glitch, scanlines, flicker, digital overlay
 // ============================================================
 
 const prefix = 'Matrix-Rain';
@@ -765,13 +752,9 @@ const DATA_CHARS = "01アイウエオカキクケコサシスセソタチツテ�
 
 // ============================================================
 // SKETCH FACTORY
-// tile: { cols, rows } — repeat the square composition N times
 // ============================================================
-function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
+function makeSketch({ slotId, seedValue, isMaster, maxFrames }) {
   const stopAfter = maxFrames || Infinity;
-  const tileCols = (tile && tile.cols) || 1;
-  const tileRows = (tile && tile.rows) || 1;
-
   let canvasW = 0;
   let canvasH = 0;
   let frameCount = 0;
@@ -824,32 +807,19 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
         return;
       }
 
-      // Tile composition
-      const tileW = canvasW / tileCols;
-      const tileH = canvasH / tileRows;
-      const tileSize = Math.min(tileW, tileH);
-
-      for (let ty = 0; ty < tileRows; ty++) {
-        for (let tx = 0; tx < tileCols; tx++) {
-          const ox = tx * tileW + (tileW - tileSize) / 2;
-          const oy = ty * tileH + (tileH - tileSize) / 2;
-
-          p.push();
-          p.translate(ox, oy);
-          drawComposition(p, tileSize, seedValue);
-          p.pop();
-        }
-      }
-
+      // Directly draw the composition to fill the entire canvas exactly
+      drawComposition(p, canvasW, canvasH, seedValue);
       frameCount++;
     };
   };
 
-  // ---- Draw the matrix-rain composition into a square of side `size` ----
-  function drawComposition(p, size, seedValue) {
+  // ---- Draw the matrix-rain composition to fill the canvas ----
+  function drawComposition(p, w, h, seedValue) {
     const sr = new SeededRandom(seedValue);
-    const cs = size;
-    const cellSize = cs / GRID_SIZE;
+    
+    // Cell size based on actual width/height
+    const cellW = w / GRID_SIZE;
+    const cellH = h / GRID_SIZE;
 
     const rainType = sr.int(0, 5);
     const intensity = sr.range(0.3, 0.8);
@@ -916,21 +886,21 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
     // ---- Grid lines ----
     p.drawingContext.globalAlpha = 0.03;
     p.stroke(bgHue, bgSaturation * 0.5, bgBrightness * 0.2);
-    p.strokeWeight(cs * 0.0005);
+    p.strokeWeight(Math.min(w, h) * 0.0005);
     for (let x = 0; x < GRID_SIZE; x += 5) {
-      p.line(x * cellSize, 0, x * cellSize, cs);
+      p.line(x * cellW, 0, x * cellW, h);
     }
     for (let y = 0; y < GRID_SIZE; y += 5) {
-      p.line(0, y * cellSize, cs, y * cellSize);
+      p.line(0, y * cellH, w, y * cellH);
     }
     p.noStroke();
     p.drawingContext.globalAlpha = 1;
 
     // ---- Scanlines ----
     p.drawingContext.globalAlpha = 0.02;
-    for (let y = 0; y < cs; y += cs * 0.004) {
+    for (let y = 0; y < h; y += h * 0.004) {
       p.fill(bgHue, bgSaturation * 0.2, bgBrightness * 0.5);
-      p.rect(0, y, cs, cs * 0.001);
+      p.rect(0, y, w, h * 0.001);
     }
     p.drawingContext.globalAlpha = 1;
 
@@ -951,37 +921,37 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
 
         p.fill(hue, saturation, headBrightness);
 
-        const x = i * cellSize;
-        const y = j * cellSize;
+        const x = i * cellW;
+        const y = j * cellH;
 
         if (rainType === 4) {
           // Binary mode
           p.fill(hue, saturation * 0.7, headBrightness * 1.2);
-          p.textSize(cellSize * 1.2);
+          p.textSize(cellW * 1.2);
           p.textAlign(p.CENTER, p.CENTER);
           const binaryChar = sr.rand() > 0.5 ? "1" : "0";
-          p.text(binaryChar, x + cellSize / 2, y + cellSize / 2);
+          p.text(binaryChar, x + cellW / 2, y + cellH / 2);
         } else if (rainType === 5) {
           // Particle mode
-          const particleSize = cellSize * (0.3 + rainIntensity * 0.7);
-          p.ellipse(x + cellSize / 2, y + cellSize / 2, particleSize);
+          const particleSize = Math.min(cellW, cellH) * (0.3 + rainIntensity * 0.7);
+          p.ellipse(x + cellW / 2, y + cellH / 2, particleSize);
 
           if (rainIntensity > 0.5) {
             p.drawingContext.globalAlpha = rainIntensity * 0.3;
             p.fill(hue, saturation * 0.5, headBrightness * 0.8);
-            p.ellipse(x + cellSize / 2, y + cellSize / 2, particleSize * 1.5);
+            p.ellipse(x + cellW / 2, y + cellH / 2, particleSize * 1.5);
             p.drawingContext.globalAlpha = 1;
           }
         } else {
           // Classic stream
-          const streamWidth = cellSize * (0.4 + Math.sin(i * 0.5) * 0.2);
-          const streamHeight = cellSize * (0.8 + rainIntensity * 0.4);
-          p.rect(x + (cellSize - streamWidth) / 2, y, streamWidth, streamHeight);
+          const streamWidth = cellW * (0.4 + Math.sin(i * 0.5) * 0.2);
+          const streamHeight = cellH * (0.8 + rainIntensity * 0.4);
+          p.rect(x + (cellW - streamWidth) / 2, y, streamWidth, streamHeight);
 
           if (rainIntensity > 0.7) {
             p.drawingContext.globalAlpha = 0.3;
             p.fill(hue, saturation * 0.6, headBrightness * 1.3);
-            p.rect(x + (cellSize - streamWidth) / 2, y, streamWidth, streamHeight * 0.3);
+            p.rect(x + (cellW - streamWidth) / 2, y, streamWidth, streamHeight * 0.3);
             p.drawingContext.globalAlpha = 1;
           }
         }
@@ -990,7 +960,7 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
         if (sr.rand() > 0.97) {
           p.drawingContext.globalAlpha = 0.8;
           p.fill(60, 100, 100);
-          p.rect(x, y, cellSize, cellSize);
+          p.rect(x, y, cellW, cellH);
           p.drawingContext.globalAlpha = 1;
         }
       }
@@ -1001,35 +971,35 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
       // Horizontal glitches
       p.drawingContext.globalAlpha = 0.3;
       for (let g = 0; g < 5; g++) {
-        const glitchY = Math.floor(sr.rand() * GRID_SIZE) * cellSize;
-        const glitchHeight = sr.rand() * cs * 0.003 + cs * 0.001;
-        const offset = sr.rand() * cs * 0.01 - cs * 0.005;
+        const glitchY = Math.floor(sr.rand() * GRID_SIZE) * cellH;
+        const glitchHeight = sr.rand() * h * 0.003 + h * 0.001;
+        const offset = sr.rand() * w * 0.01 - w * 0.005;
 
         p.drawingContext.globalAlpha = 0.4;
         p.fill(60, 100, 100, 0.3);
-        p.rect(offset, glitchY, cs, glitchHeight);
+        p.rect(offset, glitchY, w, glitchHeight);
 
         p.drawingContext.globalAlpha = 0.2;
         p.fill(sr.rand() * 360, 100, 100);
-        p.rect(0, glitchY, cs, glitchHeight);
+        p.rect(0, glitchY, w, glitchHeight);
       }
 
       // Vertical glitches
       for (let g = 0; g < 3; g++) {
-        const glitchX = Math.floor(sr.rand() * GRID_SIZE) * cellSize;
-        const glitchWidth = sr.rand() * cs * 0.002 + cs * 0.001;
+        const glitchX = Math.floor(sr.rand() * GRID_SIZE) * cellW;
+        const glitchWidth = sr.rand() * w * 0.002 + w * 0.001;
         p.drawingContext.globalAlpha = 0.3;
         p.fill(bgHue, 100, 100);
-        p.rect(glitchX, 0, glitchWidth, cs);
+        p.rect(glitchX, 0, glitchWidth, h);
       }
 
       // Pixel glitches
       p.drawingContext.globalAlpha = 0.6;
       for (let pp = 0; pp < 20; pp++) {
-        const px = Math.floor(sr.rand() * GRID_SIZE) * cellSize;
-        const py = Math.floor(sr.rand() * GRID_SIZE) * cellSize;
+        const px = Math.floor(sr.rand() * GRID_SIZE) * cellW;
+        const py = Math.floor(sr.rand() * GRID_SIZE) * cellH;
         p.fill(sr.rand() > 0.5 ? 60 : 0, 100, 100);
-        p.rect(px, py, cellSize, cellSize);
+        p.rect(px, py, cellW, cellH);
       }
       p.drawingContext.globalAlpha = 1;
     }
@@ -1037,12 +1007,12 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
     // ---- Digital overlay ----
     p.drawingContext.globalAlpha = 0.1;
     p.fill(bgHue, bgSaturation * 0.5, bgBrightness * 0.8);
-    p.textSize(cs * 0.012);
+    p.textSize(Math.min(w, h) * 0.012);
     p.textAlign(p.LEFT, p.TOP);
 
     for (let t = 0; t < 50; t++) {
-      const tx = sr.rand() * cs;
-      const ty = sr.rand() * cs;
+      const tx = sr.rand() * w;
+      const ty = sr.rand() * h;
       const char = DATA_CHARS.charAt(Math.floor(sr.rand() * DATA_CHARS.length));
       p.text(char, tx, ty);
     }
@@ -1050,11 +1020,11 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
     // Grid overlay
     p.drawingContext.globalAlpha = 0.05;
     p.stroke(bgHue, bgSaturation * 0.3, bgBrightness * 0.4);
-    p.strokeWeight(cs * 0.0005);
+    p.strokeWeight(Math.min(w, h) * 0.0005);
     for (let x = 0; x < GRID_SIZE; x++) {
       for (let y = 0; y < GRID_SIZE; y++) {
         if (sr.rand() > 0.9) {
-          p.line(x * cellSize, y * cellSize, (x + 1) * cellSize, (y + 1) * cellSize);
+          p.line(x * cellW, y * cellH, (x + 1) * cellW, (y + 1) * cellH);
         }
       }
     }
@@ -1063,9 +1033,9 @@ function makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }) {
     // Cursor blinker
     p.drawingContext.globalAlpha = 0.8;
     p.fill(60, 100, 100);
-    const cursorX = sr.rand() * (cs - cs * 0.02) + cs * 0.01;
-    const cursorY = sr.rand() * (cs - cs * 0.02) + cs * 0.01;
-    p.rect(cursorX, cursorY, cs * 0.01, cs * 0.002);
+    const cursorX = sr.rand() * (w - w * 0.02) + w * 0.01;
+    const cursorY = sr.rand() * (h - h * 0.02) + h * 0.01;
+    p.rect(cursorX, cursorY, w * 0.01, h * 0.002);
 
     p.drawingContext.globalAlpha = 1;
   }
@@ -1118,10 +1088,10 @@ function attachVisibilityObserver(p5Instance, element) {
   obs.observe(element);
 }
 
-function createLiveP5({ slotId, seedValue, isMaster, maxFrames, tile, onCreated }) {
+function createLiveP5({ slotId, seedValue, isMaster, maxFrames, onCreated }) {
   whenSlotReady(slotId, (slot) => {
     slot.querySelectorAll('canvas').forEach(c => c.remove());
-    const inst = new p5(makeSketch({ slotId, seedValue, isMaster, maxFrames, tile }), slot);
+    const inst = new p5(makeSketch({ slotId, seedValue, isMaster, maxFrames }), slot);
     inst._frozen = false;
     attachVisibilityObserver(inst, slot);
     if (onCreated) onCreated(inst);
@@ -1137,7 +1107,6 @@ function drawPlate() {
     seedValue: seed,
     isMaster: true,
     maxFrames: 2,
-    tile: { cols: 1, rows: 1 },
     onCreated: (inst) => { plateP5 = inst; }
   });
 }
@@ -1151,7 +1120,6 @@ function drawCover() {
     seedValue: seed,
     isMaster: false,
     maxFrames: 2,
-    tile: { cols: 1, rows: 1 },
     onCreated: (inst) => { coverP5 = inst; }
   });
 }
@@ -1165,19 +1133,18 @@ function drawFramedPlate() {
     seedValue: seed,
     isMaster: false,
     maxFrames: 2,
-    tile: { cols: 1, rows: 1 },
     onCreated: (inst) => { frameP5 = inst; }
   });
 }
 
 // ============================================================
-// SURFACES — same seed as plate, tiled to fill aspect ratio
+// SURFACES — same seed as plate, scaled to fill aspect ratio
 // ============================================================
 const surfaceDefs = [
-  { id: 'surfacePrint',   wrapId: 'wrap-surfacePrint',   tile: { cols: 1, rows: 1 } },
-  { id: 'surfaceScarf',   wrapId: 'wrap-surfaceScarf',   tile: { cols: 3, rows: 1 } },
-  { id: 'surfaceTextile', wrapId: 'wrap-surfaceTextile', tile: { cols: 2, rows: 2 } },
-  { id: 'surfaceWall',    wrapId: 'wrap-surfaceWall',    tile: { cols: 1, rows: 2 } }
+  { id: 'surfacePrint',   wrapId: 'wrap-surfacePrint' },
+  { id: 'surfaceScarf',   wrapId: 'wrap-surfaceScarf' },
+  { id: 'surfaceTextile', wrapId: 'wrap-surfaceTextile' },
+  { id: 'surfaceWall',    wrapId: 'wrap-surfaceWall' }
 ];
 
 function drawSurfaces() {
@@ -1206,8 +1173,7 @@ function drawSurfaces() {
           slotId: slot.id || (slot.id = def.id + '-slot'),
           seedValue: seed,
           isMaster: false,
-          maxFrames: 2,
-          tile: def.tile
+          maxFrames: 2
         }),
         slot
       );
@@ -1282,8 +1248,7 @@ function drawArchive() {
           slotId: 'archive-slot-' + i,
           seedValue: archiveSeeds[i],
           isMaster: false,
-          maxFrames: 2,
-          tile: { cols: 1, rows: 1 }
+          maxFrames: 2
         }),
         slot
       );
